@@ -3,67 +3,67 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32 Flight Simulator - Mega Metropolis</title>
+  <title>ESP32 Flight Simulator - High Performance Gyro Deck</title>
   <style>
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      margin: 0;
       overflow: hidden;
-      background: #648ca6;
-      font-family: monospace;
+      background: #5b8296;
+      font-family: 'Courier New', Courier, monospace;
       user-select: none;
     }
     #connectBtn {
       position: absolute;
-      top: 18px;
-      left: 18px;
+      top: 20px;
+      left: 20px;
       z-index: 100;
-      padding: 12px 22px;
+      padding: 12px 24px;
       font-family: inherit;
       font-size: 14px;
       font-weight: 700;
       background: #10b981;
       color: #ffffff;
-      border: 2px solid #047857;
-      border-radius: 8px;
+      border: 2px solid #059669;
+      border-radius: 6px;
       cursor: pointer;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.3);
-      transition: all 0.15s ease;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      transition: all 0.2s ease;
     }
     #connectBtn:hover {
       background: #059669;
-      transform: translateY(-2px);
+      transform: scale(1.03);
     }
     #flightDeck {
       position: absolute;
-      top: 16px;
-      left: 16px;
+      top: 18px;
+      left: 18px;
       z-index: 50;
       color: #38bdf8;
-      text-shadow: 0 0 6px rgba(56, 189, 248, 0.7);
+      text-shadow: 0 0 6px rgba(56, 189, 248, 0.8);
       font-size: 13px;
-      line-height: 1.5;
+      line-height: 1.6;
       pointer-events: none;
       display: none;
-      background: rgba(15, 23, 42, 0.85);
-      padding: 12px 18px;
+      background: rgba(15, 23, 42, 0.88);
+      padding: 14px 18px;
       border-radius: 8px;
-      border: 1px solid rgba(56, 189, 248, 0.35);
+      border: 1px solid rgba(56, 189, 248, 0.4);
       backdrop-filter: blur(4px);
     }
-    #crashBanner {
+    #crashAlert {
       position: absolute;
-      top: 25%;
+      top: 40%;
       left: 50%;
       transform: translate(-50%, -50%);
       color: #ef4444;
-      font-size: 42px;
+      font-size: 46px;
       font-weight: 900;
-      letter-spacing: 5px;
-      text-shadow: 0 0 20px rgba(239, 68, 68, 0.9), 0 0 8px #000;
+      letter-spacing: 6px;
+      text-shadow: 0 0 24px rgba(239, 68, 68, 0.9), 0 0 8px #000;
       display: none;
       z-index: 99;
       pointer-events: none;
+      text-align: center;
     }
     #crosshair {
       position: absolute;
@@ -87,11 +87,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-  <button id="connectBtn">Connect ESP32 Controller</button>
-  <div id="crashBanner">IMPACT DETECTED</div>
+  <button id="connectBtn">Connect ESP32</button>
+  <div id="crashAlert">CRASH DETECTED<br><span style="font-size: 18px; color: #fff;">RESPAWNING...</span></div>
   <div id="crosshair"></div>
   <div id="flightDeck">
-    <div><b>[SYSTEM]</b> TELEMETRY ACTIVE (115200 BAUD)</div>
+    <div><b>[SYSTEM]</b> COMPLEMENTARY GYRO LINK ACTIVE</div>
     <div>ALT:  <span id="hudAlt">0</span> FT</div>
     <div>IAS:  <span id="hudSpd">0</span> KTS</div>
     <div>HDG:  <span id="hudHdg">000</span>°</div>
@@ -99,13 +99,13 @@
   </div>
 
   <script>
-    // --- 1. Scene & Environment Setup ---
+    // --- 1. Scene, Sky & Atmospheric Fog ---
     const scene = new THREE.Scene();
-    const skyColor = new THREE.Color(0x648ca6);
-    scene.background = skyColor;
-    scene.fog = new THREE.Fog(0x648ca6, 400, 3200);
+    const skyCol = new THREE.Color(0x60869b);
+    scene.background = skyCol;
+    scene.fog = new THREE.Fog(0x60869b, 500, 3600);
 
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4500);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.2, 5000);
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -113,64 +113,59 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0xdbe6f0, 0.85);
-    scene.add(ambientLight);
+    const ambient = new THREE.AmbientLight(0xdce6ee, 0.9);
+    scene.add(ambient);
 
-    const sun = new THREE.DirectionalLight(0xfff6e6, 1.45);
-    sun.position.set(450, 900, 350);
+    const sun = new THREE.DirectionalLight(0xfff5e6, 1.4);
+    sun.position.set(500, 1000, 400);
     sun.castShadow = true;
     sun.shadow.mapSize.width = 2048;
     sun.shadow.mapSize.height = 2048;
-    const d = 900;
-    sun.shadow.camera.left = -d;
-    sun.shadow.camera.right = d;
-    sun.shadow.camera.top = d;
-    sun.shadow.camera.bottom = -d;
-    sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 2800;
+    const d = 1000;
+    sun.shadow.camera.left = -d; sun.shadow.camera.right = d;
+    sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
     scene.add(sun);
 
-    // --- 2. Long Ground & Runway Grid (10,000 Units Long) ---
-    const groundMat = new THREE.MeshLambertMaterial({ color: 0x475156 });
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(3500, 10000), groundMat);
+    // --- 2. Giant Map: 18,000 Units Long Ground & Runway Grid ---
+    const MAP_LIMIT_Z = 9000;
+    const groundMat = new THREE.MeshLambertMaterial({ color: 0x3d4447 });
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(4500, MAP_LIMIT_Z * 2), groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // Central Multi-lane Boulevard
-    const avenueMat = new THREE.MeshLambertMaterial({ color: 0x22262a });
-    const avenue = new THREE.Mesh(new THREE.PlaneGeometry(80, 10000), avenueMat);
+    const avenueMat = new THREE.MeshLambertMaterial({ color: 0x1f2326 });
+    const avenue = new THREE.Mesh(new THREE.PlaneGeometry(90, MAP_LIMIT_Z * 2), avenueMat);
     avenue.rotation.x = -Math.PI / 2;
     avenue.position.y = 0.1;
     avenue.receiveShadow = true;
     scene.add(avenue);
 
-    // Centerline Dashes
     const dashMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
-    for (let z = -4900; z < 4900; z += 32) {
-      const dash = new THREE.Mesh(new THREE.PlaneGeometry(2, 16), dashMat);
+    for (let z = -MAP_LIMIT_Z + 100; z < MAP_LIMIT_Z - 100; z += 35) {
+      const dash = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 16), dashMat);
       dash.rotation.x = -Math.PI / 2;
       dash.position.set(0, 0.15, z);
       scene.add(dash);
     }
 
-    // --- 3. Mega-Buildings & Skybridge Twin Towers ---
+    // --- 3. Mega-Buildings, Skybridges & Collision Boxes ---
     const colliders = [];
-    const bPalette = [0x434c56, 0x58524d, 0x363c43, 0x6e6861, 0x2e333a];
+    const bPalette = [0x38414a, 0x4a4542, 0x2e343b, 0x5a554f, 0x24282e];
 
     function createMegaSkyscraper(x, z, customW, customD, customH) {
       const group = new THREE.Group();
       const col = bPalette[Math.floor(Math.random() * bPalette.length)];
-      const bMat = new THREE.MeshLambertMaterial({ color: col });
+      const mat = new THREE.MeshLambertMaterial({ color: col });
 
-      let width = customW || (55 + Math.random() * 25);
-      let depth = customD || (55 + Math.random() * 25);
+      let width = customW || (60 + Math.random() * 30);
+      let depth = customD || (60 + Math.random() * 30);
       let curY = 0;
       const tiers = customH ? 3 : (3 + Math.floor(Math.random() * 3));
 
       for (let i = 0; i < tiers; i++) {
-        const tierH = customH ? (customH / tiers) : (50 + Math.random() * 70);
-        const tier = new THREE.Mesh(new THREE.BoxGeometry(width, tierH, depth), bMat);
+        const tierH = customH ? (customH / tiers) : (60 + Math.random() * 80);
+        const tier = new THREE.Mesh(new THREE.BoxGeometry(width, tierH, depth), mat);
         tier.position.y = curY + tierH / 2;
         tier.castShadow = true;
         tier.receiveShadow = true;
@@ -179,17 +174,17 @@
         colliders.push({
           minX: x - width / 2, maxX: x + width / 2,
           minZ: z - depth / 2, maxZ: z + depth / 2,
+          minY: 0,
           maxY: curY + tierH
         });
 
         curY += tierH;
-        width *= 0.74;
-        depth *= 0.74;
+        width *= 0.75;
+        depth *= 0.75;
       }
 
-      // Spire on mega-towers
-      if (curY > 160) {
-        const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 3.5, 45, 8), bMat);
+      if (curY > 180) {
+        const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 3.5, 45, 8), mat);
         spire.position.y = curY + 22.5;
         spire.castShadow = true;
         group.add(spire);
@@ -197,190 +192,146 @@
 
       group.position.set(x, 0, z);
       scene.add(group);
-      return { totalH: curY, group };
     }
 
-    // Skybridge Generator (Joins 2 Massive Towers Together)
-    function buildTwinTowersWithSkybridge(centerZ) {
-      const towerDistance = 140; // Span across flight corridor
-      const towerH = 260;
+    function createSkybridgeComplex(centerZ) {
+      const span = 160;
+      const height = 280;
+      createMegaSkyscraper(-span, centerZ, 80, 80, height);
+      createMegaSkyscraper(span, centerZ, 80, 80, height);
 
-      // Left Mega Tower
-      createMegaSkyscraper(-towerDistance, centerZ, 70, 70, towerH);
-      // Right Mega Tower
-      createMegaSkyscraper(towerDistance, centerZ, 70, 70, towerH);
+      const bridgeMat = new THREE.MeshLambertMaterial({ color: 0x252b33 });
+      [110, 190].forEach(h => {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(span * 2, 16, 26), bridgeMat);
+        b.position.set(0, h, centerZ);
+        b.castShadow = true;
+        b.receiveShadow = true;
+        scene.add(b);
 
-      // Elevated Connecting Skybridges (Fly underneath them!)
-      const bridgeH = 14;
-      const bridgeW = 20;
-      const bridgeSpan = towerDistance * 2;
-      const bridgeMat = new THREE.MeshLambertMaterial({ color: 0x2f363f });
-
-      // Lower Skybridge
-      const b1 = new THREE.Mesh(new THREE.BoxGeometry(bridgeSpan, bridgeH, bridgeW), bridgeMat);
-      b1.position.set(0, 110, centerZ);
-      b1.castShadow = true;
-      b1.receiveShadow = true;
-      scene.add(b1);
-      colliders.push({ minX: -towerDistance, maxX: towerDistance, minZ: centerZ - bridgeW/2, maxZ: centerZ + bridgeW/2, minY: 110 - bridgeH/2, maxY: 110 + bridgeH/2 });
-
-      // Upper Skybridge
-      const b2 = new THREE.Mesh(new THREE.BoxGeometry(bridgeSpan, bridgeH, bridgeW), bridgeMat);
-      b2.position.set(0, 195, centerZ);
-      b2.castShadow = true;
-      b2.receiveShadow = true;
-      scene.add(b2);
-      colliders.push({ minX: -towerDistance, maxX: towerDistance, minZ: centerZ - bridgeW/2, maxZ: centerZ + bridgeW/2, minY: 195 - bridgeH/2, maxY: 195 + bridgeH/2 });
+        colliders.push({
+          minX: -span, maxX: span,
+          minZ: centerZ - 13, maxZ: centerZ + 13,
+          minY: h - 8, maxY: h + 8
+        });
+      });
     }
 
-    // Build the Long Metropolis with Skybridge Complexes
-    for (let z = -4400; z <= 4400; z += 180) {
-      if (z === -2200 || z === 0 || z === 2200) {
-        buildTwinTowersWithSkybridge(z);
+    // Populate the 18,000 unit world
+    for (let z = -8400; z <= 8400; z += 220) {
+      if (Math.abs(z) % 2200 === 0) {
+        createSkybridgeComplex(z);
         continue;
       }
-      for (let x = -560; x <= 560; x += 110) {
-        if (Math.abs(x) < 65) continue; // Keep central runway open
+      for (let x = -650; x <= 650; x += 130) {
+        if (Math.abs(x) < 80) continue;
         createMegaSkyscraper(x, z);
       }
     }
 
-    // --- 4. Dynamic Moving Traffic ---
-    const traffic = [];
-    const carCols = [0xef4444, 0x3b82f6, 0xf8fafc, 0xf59e0b, 0x1e293b];
-    for (let i = 0; i < 90; i++) {
-      const car = new THREE.Group();
-      const body = new THREE.Mesh(
-        new THREE.BoxGeometry(3.5, 2, 7.5),
-        new THREE.MeshLambertMaterial({ color: carCols[i % carCols.length] })
-      );
-      body.position.y = 1;
-      body.castShadow = true;
-      car.add(body);
-
-      const hlMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
-      const hl = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.2), hlMat);
-      hl.position.set(-1.2, 0.9, -3.8);
-      const hr = hl.clone();
-      hr.position.x = 1.2;
-      car.add(hl);
-      car.add(hr);
-
-      const lane = (i % 2 === 0) ? -16 : 16;
-      car.position.set(lane, 0, (Math.random() - 0.5) * 9000);
-      car.userData = { speed: (i % 2 === 0 ? 1 : -1) * (1.1 + Math.random() * 0.9) };
-      if (i % 2 !== 0) car.rotation.y = Math.PI;
-
-      scene.add(car);
-      traffic.push(car);
-    }
-
-    // --- 5. Twin-Engine Aerobatics Airplane ---
+    // --- 4. The Twin-Engine Aerobatics Plane ---
     const plane = new THREE.Group();
     const planeMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
     const trimMat = new THREE.MeshLambertMaterial({ color: 0x1d4ed8 });
     const engineMat = new THREE.MeshLambertMaterial({ color: 0x1f2937 });
 
-    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 0.7, 17, 14), planeMat);
+    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 0.8, 18, 14), planeMat);
     fuse.rotation.x = Math.PI / 2;
     fuse.castShadow = true;
     plane.add(fuse);
 
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(1.3, 4.2, 14), planeMat);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(1.4, 4.5, 14), planeMat);
     nose.rotation.x = -Math.PI / 2;
-    nose.position.z = -10.6;
+    nose.position.z = -11.2;
     nose.castShadow = true;
     plane.add(nose);
 
-    const wings = new THREE.Mesh(new THREE.BoxGeometry(26, 0.35, 3.8), planeMat);
+    const wings = new THREE.Mesh(new THREE.BoxGeometry(28, 0.4, 4), planeMat);
     wings.position.set(0, 0.2, 0.5);
     wings.castShadow = true;
     plane.add(wings);
 
-    const wingTips = new THREE.Mesh(new THREE.BoxGeometry(26.2, 0.38, 1.2), trimMat);
-    wingTips.position.set(0, 0.2, 2.2);
+    const wingTips = new THREE.Mesh(new THREE.BoxGeometry(28.2, 0.42, 1.2), trimMat);
+    wingTips.position.set(0, 0.2, 2.3);
     plane.add(wingTips);
 
-    const vTail = new THREE.Mesh(new THREE.BoxGeometry(0.35, 4.2, 3), trimMat);
-    vTail.position.set(0, 2.3, 7.5);
+    const vTail = new THREE.Mesh(new THREE.BoxGeometry(0.4, 4.5, 3.2), trimMat);
+    vTail.position.set(0, 2.5, 8);
     vTail.castShadow = true;
     plane.add(vTail);
 
-    const hTail = new THREE.Mesh(new THREE.BoxGeometry(9, 0.25, 2.2), planeMat);
-    hTail.position.set(0, 0.8, 7.8);
+    const hTail = new THREE.Mesh(new THREE.BoxGeometry(10, 0.3, 2.4), planeMat);
+    hTail.position.set(0, 0.9, 8.2);
     hTail.castShadow = true;
     plane.add(hTail);
 
     const props = [];
-    [-4.8, 4.8].forEach(xOff => {
-      const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 5, 12), engineMat);
+    [-5.2, 5.2].forEach(xOff => {
+      const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 5.2, 12), engineMat);
       nacelle.rotation.x = Math.PI / 2;
       nacelle.position.set(xOff, -0.2, 0.5);
       nacelle.castShadow = true;
       plane.add(nacelle);
 
       const propGroup = new THREE.Group();
-      propGroup.position.set(xOff, -0.2, -2.4);
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.45, 0.08), new THREE.MeshBasicMaterial({ color: 0x111827 }));
+      propGroup.position.set(xOff, -0.2, -2.6);
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.5, 0.08), new THREE.MeshBasicMaterial({ color: 0x111827 }));
       propGroup.add(blade);
       plane.add(propGroup);
       props.push(propGroup);
     });
 
-    plane.position.set(0, 85, 0);
+    plane.position.set(0, 90, 0);
     scene.add(plane);
 
-    // --- 6. 3D Crash Fire & Smoke Particle Engine ---
+    // --- 5. High-Impact Crash Fire & Smoke Explosion System ---
     const fireParticles = [];
-    const fireMatYellow = new THREE.MeshBasicMaterial({ color: 0xffdd00 });
-    const fireMatOrange = new THREE.MeshBasicMaterial({ color: 0xff5500 });
-    const smokeMat = new THREE.MeshLambertMaterial({ color: 0x222222, transparent: true, opacity: 0.8 });
-    const pGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+    const pGeo = new THREE.BoxGeometry(1.6, 1.6, 1.6);
+    const fireMats = [
+      new THREE.MeshBasicMaterial({ color: 0xffffff }),
+      new THREE.MeshBasicMaterial({ color: 0xffcc00 }),
+      new THREE.MeshBasicMaterial({ color: 0xff4400 }),
+      new THREE.MeshLambertMaterial({ color: 0x222222, transparent: true, opacity: 0.85 })
+    ];
 
-    for (let i = 0; i < 85; i++) {
-      const mesh = new THREE.Mesh(pGeo, i % 3 === 0 ? smokeMat : (i % 2 === 0 ? fireMatYellow : fireMatOrange));
-      mesh.visible = false;
-      scene.add(mesh);
+    for (let i = 0; i < 120; i++) {
+      const p = new THREE.Mesh(pGeo, fireMats[i % 4]);
+      p.visible = false;
+      scene.add(p);
       fireParticles.push({
-        mesh: mesh,
+        mesh: p,
         vx: 0, vy: 0, vz: 0,
-        rotX: 0, rotY: 0,
         life: 0, maxLife: 0,
-        isSmoke: i % 3 === 0
+        isSmoke: i % 4 === 3
       });
     }
 
-    function igniteCrashFire(pos) {
+    function triggerCrashExplosion(pos) {
       fireParticles.forEach(p => {
         p.mesh.position.copy(pos);
         p.mesh.visible = true;
         p.mesh.scale.set(1, 1, 1);
-        p.vx = (Math.random() - 0.5) * 3.5;
-        p.vy = Math.random() * 3.5 + 1.2;
-        p.vz = (Math.random() - 0.5) * 3.5;
-        p.rotX = (Math.random() - 0.5) * 0.2;
-        p.rotY = (Math.random() - 0.5) * 0.2;
+        p.vx = (Math.random() - 0.5) * 4.5;
+        p.vy = Math.random() * 4.2 + 0.8;
+        p.vz = (Math.random() - 0.5) * 4.5;
         p.life = 0;
-        p.maxLife = 50 + Math.random() * 50;
+        p.maxLife = 40 + Math.random() * 45;
       });
     }
 
-    function updateFireParticles() {
+    function updateExplosionParticles() {
       fireParticles.forEach(p => {
         if (!p.mesh.visible) return;
         p.life++;
         p.mesh.position.x += p.vx;
         p.mesh.position.y += p.vy;
         p.mesh.position.z += p.vz;
-        p.mesh.rotation.x += p.rotX;
-        p.mesh.rotation.y += p.rotY;
 
         if (p.isSmoke) {
-          p.vy += 0.04; // Smoke ascends
-          p.mesh.scale.multiplyScalar(1.025);
+          p.vy += 0.05;
+          p.mesh.scale.multiplyScalar(1.03);
         } else {
-          p.vy -= 0.08; // Fire debris arcs down
-          p.mesh.scale.multiplyScalar(0.97);
+          p.vy -= 0.12;
+          p.mesh.scale.multiplyScalar(0.96);
         }
 
         if (p.life >= p.maxLife) {
@@ -389,31 +340,33 @@
       });
     }
 
-    // --- 7. Flight Controls & Collision System ---
+    // --- 6. Flight Controls, Gyro Serial Parsing & Collisions ---
     let targetPitch = 0, targetRoll = 0;
     let currentPitch = 0, currentRoll = 0, currentYaw = 0;
     let flightSpeed = 2.4;
     let isFirstPerson = false;
     let isCrashed = false;
+    let cameraShake = 0;
 
-    function resetAircraft() {
+    function resetPlane() {
       isCrashed = false;
       plane.visible = true;
-      document.getElementById('crashBanner').style.display = 'none';
-      plane.position.set(0, 85, plane.position.z);
+      document.getElementById('crashAlert').style.display = 'none';
+      plane.position.set(0, 90, plane.position.z);
       currentPitch = 0; currentRoll = 0; currentYaw = 0;
     }
 
-    function triggerCrash() {
+    function handleCrash() {
       if (isCrashed) return;
       isCrashed = true;
       plane.visible = false;
-      igniteCrashFire(plane.position);
-      document.getElementById('crashBanner').style.display = 'block';
-      setTimeout(resetAircraft, 2200);
+      cameraShake = 15;
+      triggerCrashExplosion(plane.position);
+      document.getElementById('crashAlert').style.display = 'block';
+      setTimeout(resetPlane, 2000);
     }
 
-    // Connect Serial ESP32 Stream
+    // Web Serial Connection (Listening for Complementary Filtered "pitch" and "roll")
     document.getElementById('connectBtn').addEventListener('click', async () => {
       try {
         const port = await navigator.serial.requestPort();
@@ -425,44 +378,73 @@
         port.readable.pipeTo(textDecoder.writable);
         const reader = textDecoder.readable.getReader();
 
-        let buffer = "";
+        let lineBuffer = "";
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
-          buffer += value;
-          const lines = buffer.split('\n');
-          buffer = lines.pop();
+          lineBuffer += value;
+          const lines = lineBuffer.split('\n');
+          lineBuffer = lines.pop();
 
           for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) continue;
             try {
-              const data = JSON.parse(line.trim());
-              targetRoll = -(data.ay / 9.8) * 1.35;
-              targetPitch = (data.ax / 9.8) * 0.95;
+              const data = JSON.parse(trimmed);
+
+              // 1. New Gyroscope Filter Stream: {"pitch": -5.2, "roll": 12.4, "btn": 0}
+              if (data.pitch !== undefined && data.roll !== undefined) {
+                targetPitch = THREE.MathUtils.clamp((data.pitch * Math.PI) / 180, -1.0, 1.0);
+                targetRoll  = THREE.MathUtils.clamp((-data.roll * Math.PI) / 180, -1.3, 1.3);
+              }
+              // 2. Backward compatibility with raw Accel Stream: {"ax": 0.12, "ay": -0.45, "btn": 0}
+              else if (data.ay !== undefined && data.ax !== undefined) {
+                targetRoll = THREE.MathUtils.clamp(-(data.ay / 9.8) * 1.4, -1.3, 1.3);
+                targetPitch = THREE.MathUtils.clamp((data.ax / 9.8) * 1.0, -1.1, 1.1);
+              }
 
               if (data.btn === 1) {
                 isFirstPerson = !isFirstPerson;
-                document.getElementById('hudCam').innerText = isFirstPerson ? 'FIRST PERSON (COCKPIT)' : 'CHASE (3RD)';
+                document.getElementById('hudCam').innerText = isFirstPerson ? 'FIRST PERSON' : 'CHASE (3RD)';
                 document.getElementById('crosshair').style.display = isFirstPerson ? 'block' : 'none';
               }
-            } catch (e) {}
+            } catch (err) {}
           }
         }
       } catch (err) {
-        console.error("Serial error:", err);
+        console.error("Serial connection error:", err);
       }
     });
 
-    // --- 8. Animation & Flight Loop ---
+    // Keyboard Fallback (Arrow Keys / WASD)
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'a') targetRoll = 0.8;
+      if (e.key === 'ArrowRight' || e.key === 'd') targetRoll = -0.8;
+      if (e.key === 'ArrowUp' || e.key === 'w') targetPitch = -0.5;
+      if (e.key === 'ArrowDown' || e.key === 's') targetPitch = 0.5;
+      if (e.key === 'c') {
+        isFirstPerson = !isFirstPerson;
+        document.getElementById('hudCam').innerText = isFirstPerson ? 'FIRST PERSON' : 'CHASE (3RD)';
+        document.getElementById('crosshair').style.display = isFirstPerson ? 'block' : 'none';
+      }
+    });
+    window.addEventListener('keyup', (e) => {
+      if (['ArrowLeft','ArrowRight','a','d'].includes(e.key)) targetRoll = 0;
+      if (['ArrowUp','ArrowDown','w','s'].includes(e.key)) targetPitch = 0;
+    });
+
+    // --- 7. Main Aerodynamic Flight Loop ---
     const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+
     function animate() {
       requestAnimationFrame(animate);
 
-      updateFireParticles();
+      updateExplosionParticles();
 
       if (!isCrashed) {
-        currentRoll += (targetRoll - currentRoll) * 0.085;
-        currentPitch += (targetPitch - currentPitch) * 0.085;
-        currentYaw += -currentRoll * 0.025;
+        currentRoll += (targetRoll - currentRoll) * 0.09;
+        currentPitch += (targetPitch - currentPitch) * 0.09;
+        currentYaw += -currentRoll * 0.026;
 
         euler.set(currentPitch, currentYaw, currentRoll, 'YXZ');
         plane.quaternion.setFromEuler(euler);
@@ -470,51 +452,55 @@
         const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(plane.quaternion);
         plane.position.addScaledVector(forward, flightSpeed);
 
-        // Ground crash check
-        if (plane.position.y <= 2.5) {
-          triggerCrash();
+        // Ground collision
+        if (plane.position.y <= 2.2) {
+          handleCrash();
         }
 
-        // Mega-skyscraper & Skybridge Collisions
+        // Fast building & bridge collision detection
         const px = plane.position.x;
         const py = plane.position.y;
         const pz = plane.position.z;
-        for (let b of colliders) {
-          const inX = px > b.minX && px < b.maxX;
-          const inZ = pz > b.minZ && pz < b.maxZ;
-          const inY = b.minY !== undefined ? (py >= b.minY && py <= b.maxY) : (py <= b.maxY);
-          if (inX && inZ && inY) {
-            triggerCrash();
+        for (let i = 0; i < colliders.length; i++) {
+          const c = colliders[i];
+          if (px > c.minX && px < c.maxX && pz > c.minZ && pz < c.maxZ && py >= c.minY && py <= c.maxY) {
+            handleCrash();
             break;
           }
         }
       }
 
-      // Continuous long looping corridor (Seamless infinite loop over 9,200 units)
-      if (Math.abs(plane.position.z) > 4600) plane.position.z *= -0.95;
-      if (Math.abs(plane.position.x) > 600) plane.position.x *= -0.95;
+      // Seamless Long Map Loop (18,000 units)
+      if (Math.abs(plane.position.z) > MAP_LIMIT_Z - 200) {
+        plane.position.z *= -0.96;
+      }
+      if (Math.abs(plane.position.x) > 750) {
+        plane.position.x *= -0.96;
+      }
 
-      props.forEach(p => p.rotation.z += 0.85);
+      // Spin propellers
+      props.forEach(p => p.rotation.z += 0.9);
 
-      traffic.forEach(car => {
-        car.position.z += car.userData.speed;
-        if (car.position.z > 4600) car.position.z = -4600;
-        if (car.position.z < -4600) car.position.z = 4600;
-      });
-
-      // Camera view update
+      // Camera Position & Dynamic Shake
       if (isFirstPerson) {
         camera.position.copy(plane.position);
         camera.quaternion.copy(plane.quaternion);
         camera.translateZ(-3.8);
-        camera.translateY(0.65);
+        camera.translateY(0.7);
       } else {
-        const chaseOffset = new THREE.Vector3(0, 8, 32).applyQuaternion(plane.quaternion);
+        const chaseOffset = new THREE.Vector3(0, 9, 34).applyQuaternion(plane.quaternion);
         camera.position.lerp(plane.position.clone().add(chaseOffset), 0.22);
-        camera.lookAt(plane.position.clone().add(new THREE.Vector3(0, 1.2, -14).applyQuaternion(plane.quaternion)));
+        camera.lookAt(plane.position.clone().add(new THREE.Vector3(0, 1.5, -14).applyQuaternion(plane.quaternion)));
       }
 
-      // Telemetry update
+      if (cameraShake > 0) {
+        camera.position.x += (Math.random() - 0.5) * cameraShake;
+        camera.position.y += (Math.random() - 0.5) * cameraShake;
+        cameraShake *= 0.88;
+        if (cameraShake < 0.1) cameraShake = 0;
+      }
+
+      // HUD Telemetry
       document.getElementById('hudSpd').innerText = Math.round(flightSpeed * 85);
       document.getElementById('hudAlt').innerText = Math.max(0, Math.round(plane.position.y * 7));
       let deg = Math.round((-currentYaw * 180 / Math.PI) % 360);
