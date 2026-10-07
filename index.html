@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32 Bluetooth Wireless Flight Simulator</title>
+  <title>ESP32 Bluetooth Flight Simulator - Arcade Edition</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -65,6 +65,26 @@
       pointer-events: none;
       text-align: center;
     }
+    #ringToast {
+      position: absolute;
+      top: 22%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #facc15;
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      text-shadow: 0 0 15px rgba(250, 204, 21, 0.8), 0 0 5px #000;
+      display: none;
+      z-index: 80;
+      pointer-events: none;
+      animation: popFade 0.6s ease-out forwards;
+    }
+    @keyframes popFade {
+      0% { opacity: 0; transform: translate(-50%, -30%) scale(0.7); }
+      50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+      100% { opacity: 0; transform: translate(-50%, -70%) scale(1); }
+    }
     #crosshair {
       position: absolute;
       top: 50%;
@@ -89,17 +109,98 @@
 <body>
   <button id="connectBtn">Connect Bluetooth Controller</button>
   <div id="crashAlert">CRASH DETECTED<br><span style="font-size: 18px; color: #fff;">RESPAWNING...</span></div>
+  <div id="ringToast">+250 PTS</div>
   <div id="crosshair"></div>
   <div id="flightDeck">
-    <div><b>[SYSTEM]</b> WIRELESS BLE TELEMETRY ACTIVE</div>
-    <div>ALT:  <span id="hudAlt">0</span> FT</div>
-    <div>IAS:  <span id="hudSpd">0</span> KTS</div>
-    <div>HDG:  <span id="hudHdg">000</span>°</div>
-    <div>VIEW: <span id="hudCam">CHASE (3RD)</span></div>
+    <div><b>[TELEMETRY]</b> WIRELESS BLE ACTIVE</div>
+    <div>ALT:   <span id="hudAlt">0</span> FT</div>
+    <div>IAS:   <span id="hudSpd">0</span> KTS</div>
+    <div>HDG:   <span id="hudHdg">000</span>°</div>
+    <div>SCORE: <span id="hudScore">0</span> PTS</div>
+    <div>VIEW:  <span id="hudCam">CHASE (3RD)</span></div>
   </div>
 
   <script>
-    // --- 1. Scene, Sky & Atmospheric Lighting ---
+    // --- 1. Procedural Web Audio Engine ---
+    let audioCtx, engineOsc, engineGain, noiseNode;
+
+    function initAudio() {
+      if (audioCtx) return;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Twin-Turboprop Low Rumble Oscillator
+      engineOsc = audioCtx.createOscillator();
+      engineOsc.type = 'sawtooth';
+      engineOsc.frequency.setValueAtTime(55, audioCtx.currentTime);
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(320, audioCtx.currentTime);
+
+      engineGain = audioCtx.createGain();
+      engineGain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+
+      engineOsc.connect(filter);
+      filter.connect(engineGain);
+      engineGain.connect(audioCtx.destination);
+      engineOsc.start();
+
+      // Wind / Airflow Noise
+      const bufferSize = audioCtx.sampleRate * 2;
+      const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      const whiteNoise = audioCtx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+      whiteNoise.loop = true;
+
+      const noiseFilter = audioCtx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.setValueAtTime(600, audioCtx.currentTime);
+      noiseFilter.Q.setValueAtTime(1.5, audioCtx.currentTime);
+
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.setValueAtTime(0.015, audioCtx.currentTime);
+
+      whiteNoise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(audioCtx.destination);
+      whiteNoise.start();
+    }
+
+    function playRingChime() {
+      if (!audioCtx) return;
+      const chime = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      chime.type = 'sine';
+      chime.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      chime.frequency.exponentialRampToValueAtTime(880.00, audioCtx.currentTime + 0.12); // A5
+      gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+      chime.connect(gain);
+      gain.connect(audioCtx.destination);
+      chime.start();
+      chime.stop(audioCtx.currentTime + 0.4);
+    }
+
+    function playExplosionSound() {
+      if (!audioCtx) return;
+      const boom = audioCtx.createOscillator();
+      const boomGain = audioCtx.createGain();
+      boom.type = 'square';
+      boom.frequency.setValueAtTime(110, audioCtx.currentTime);
+      boom.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.5);
+      boomGain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+      boomGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+      boom.connect(boomGain);
+      boomGain.connect(audioCtx.destination);
+      boom.start();
+      boom.stop(audioCtx.currentTime + 0.6);
+    }
+
+    // --- 2. Three.js Scene, Lighting & Atmospheric Fog ---
     const scene = new THREE.Scene();
     const skyCol = new THREE.Color(0x60869b);
     scene.background = skyCol;
@@ -126,7 +227,7 @@
     sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
     scene.add(sun);
 
-    // --- 2. Long Ground & Runway (18,000 Units Long) ---
+    // --- 3. Long Ground Corridor & Skybridge City ---
     const MAP_LIMIT_Z = 9000;
     const groundMat = new THREE.MeshLambertMaterial({ color: 0x3d4447 });
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(4500, MAP_LIMIT_Z * 2), groundMat);
@@ -149,7 +250,6 @@
       scene.add(dash);
     }
 
-    // --- 3. Mega-Buildings & Skybridge Twin Towers ---
     const colliders = [];
     const bPalette = [0x38414a, 0x4a4542, 0x2e343b, 0x5a554f, 0x24282e];
 
@@ -174,13 +274,11 @@
         colliders.push({
           minX: x - width / 2, maxX: x + width / 2,
           minZ: z - depth / 2, maxZ: z + depth / 2,
-          minY: 0,
-          maxY: curY + tierH
+          minY: 0, maxY: curY + tierH
         });
 
         curY += tierH;
-        width *= 0.75;
-        depth *= 0.75;
+        width *= 0.75; depth *= 0.75;
       }
 
       if (curY > 180) {
@@ -196,9 +294,8 @@
 
     function createSkybridgeComplex(centerZ) {
       const span = 160;
-      const height = 280;
-      createMegaSkyscraper(-span, centerZ, 80, 80, height);
-      createMegaSkyscraper(span, centerZ, 80, 80, height);
+      createMegaSkyscraper(-span, centerZ, 80, 80, 280);
+      createMegaSkyscraper(span, centerZ, 80, 80, 280);
 
       const bridgeMat = new THREE.MeshLambertMaterial({ color: 0x252b33 });
       [110, 190].forEach(h => {
@@ -227,290 +324,25 @@
       }
     }
 
-    // --- 4. Twin-Engine Aerobatics Airplane ---
+    // --- 4. Holographic Aerial Rings (Flight Course) ---
+    const rings = [];
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true });
+    for (let i = 0; i < 28; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(14, 1.2, 8, 24), ringMat);
+      ring.position.set(
+        (Math.random() - 0.5) * 60,
+        50 + Math.random() * 110,
+        -MAP_LIMIT_Z + 400 + i * 580
+      );
+      ring.rotation.x = Math.PI / 2;
+      scene.add(ring);
+      rings.push(ring);
+    }
+
+    // --- 5. Aerobatics Plane Model & Contrails ---
     const plane = new THREE.Group();
     const planeMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
     const trimMat = new THREE.MeshLambertMaterial({ color: 0x1d4ed8 });
     const engineMat = new THREE.MeshLambertMaterial({ color: 0x1f2937 });
 
     const fuse = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 0.8, 18, 14), planeMat);
-    fuse.rotation.x = Math.PI / 2;
-    fuse.castShadow = true;
-    plane.add(fuse);
-
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(1.4, 4.5, 14), planeMat);
-    nose.rotation.x = -Math.PI / 2;
-    nose.position.z = -11.2;
-    nose.castShadow = true;
-    plane.add(nose);
-
-    const wings = new THREE.Mesh(new THREE.BoxGeometry(28, 0.4, 4), planeMat);
-    wings.position.set(0, 0.2, 0.5);
-    wings.castShadow = true;
-    plane.add(wings);
-
-    const wingTips = new THREE.Mesh(new THREE.BoxGeometry(28.2, 0.42, 1.2), trimMat);
-    wingTips.position.set(0, 0.2, 2.3);
-    plane.add(wingTips);
-
-    const vTail = new THREE.Mesh(new THREE.BoxGeometry(0.4, 4.5, 3.2), trimMat);
-    vTail.position.set(0, 2.5, 8);
-    vTail.castShadow = true;
-    plane.add(vTail);
-
-    const hTail = new THREE.Mesh(new THREE.BoxGeometry(10, 0.3, 2.4), planeMat);
-    hTail.position.set(0, 0.9, 8.2);
-    hTail.castShadow = true;
-    plane.add(hTail);
-
-    const props = [];
-    [-5.2, 5.2].forEach(xOff => {
-      const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 5.2, 12), engineMat);
-      nacelle.rotation.x = Math.PI / 2;
-      nacelle.position.set(xOff, -0.2, 0.5);
-      nacelle.castShadow = true;
-      plane.add(nacelle);
-
-      const propGroup = new THREE.Group();
-      propGroup.position.set(xOff, -0.2, -2.6);
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.5, 0.08), new THREE.MeshBasicMaterial({ color: 0x111827 }));
-      propGroup.add(blade);
-      plane.add(propGroup);
-      props.push(propGroup);
-    });
-
-    plane.position.set(0, 90, 0);
-    scene.add(plane);
-
-    // --- 5. Fire & Smoke Crash Explosion System ---
-    const fireParticles = [];
-    const pGeo = new THREE.BoxGeometry(1.6, 1.6, 1.6);
-    const fireMats = [
-      new THREE.MeshBasicMaterial({ color: 0xffffff }),
-      new THREE.MeshBasicMaterial({ color: 0xffcc00 }),
-      new THREE.MeshBasicMaterial({ color: 0xff4400 }),
-      new THREE.MeshLambertMaterial({ color: 0x222222, transparent: true, opacity: 0.85 })
-    ];
-
-    for (let i = 0; i < 120; i++) {
-      const p = new THREE.Mesh(pGeo, fireMats[i % 4]);
-      p.visible = false;
-      scene.add(p);
-      fireParticles.push({
-        mesh: p,
-        vx: 0, vy: 0, vz: 0,
-        life: 0, maxLife: 0,
-        isSmoke: i % 4 === 3
-      });
-    }
-
-    function triggerCrashExplosion(pos) {
-      fireParticles.forEach(p => {
-        p.mesh.position.copy(pos);
-        p.mesh.visible = true;
-        p.mesh.scale.set(1, 1, 1);
-        p.vx = (Math.random() - 0.5) * 4.5;
-        p.vy = Math.random() * 4.2 + 0.8;
-        p.vz = (Math.random() - 0.5) * 4.5;
-        p.life = 0;
-        p.maxLife = 40 + Math.random() * 45;
-      });
-    }
-
-    function updateExplosionParticles() {
-      fireParticles.forEach(p => {
-        if (!p.mesh.visible) return;
-        p.life++;
-        p.mesh.position.x += p.vx;
-        p.mesh.position.y += p.vy;
-        p.mesh.position.z += p.vz;
-
-        if (p.isSmoke) {
-          p.vy += 0.05;
-          p.mesh.scale.multiplyScalar(1.03);
-        } else {
-          p.vy -= 0.12;
-          p.mesh.scale.multiplyScalar(0.96);
-        }
-
-        if (p.life >= p.maxLife) {
-          p.mesh.visible = false;
-        }
-      });
-    }
-
-    // --- 6. Flight Controls, BLE Listener & Collisions ---
-    let targetPitch = 0, targetRoll = 0;
-    let currentPitch = 0, currentRoll = 0, currentYaw = 0;
-    let flightSpeed = 2.4;
-    let isFirstPerson = false;
-    let isCrashed = false;
-    let cameraShake = 0;
-
-    function resetPlane() {
-      isCrashed = false;
-      plane.visible = true;
-      document.getElementById('crashAlert').style.display = 'none';
-      plane.position.set(0, 90, plane.position.z);
-      currentPitch = 0; currentRoll = 0; currentYaw = 0;
-    }
-
-    function handleCrash() {
-      if (isCrashed) return;
-      isCrashed = true;
-      plane.visible = false;
-      cameraShake = 15;
-      triggerCrashExplosion(plane.position);
-      document.getElementById('crashAlert').style.display = 'block';
-      setTimeout(resetPlane, 2000);
-    }
-
-    // --- Web Bluetooth API Connection ---
-    const SERVICE_UUID        = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-    const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
-
-    document.getElementById('connectBtn').addEventListener('click', async () => {
-      try {
-        const device = await navigator.bluetooth.requestDevice({
-          filters: [{ name: 'ESP32_Flight_Stick' }],
-          optionalServices: [SERVICE_UUID]
-        });
-
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(SERVICE_UUID);
-        const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
-
-        await characteristic.startNotifications();
-        document.getElementById('connectBtn').style.display = 'none';
-        document.getElementById('flightDeck').style.display = 'block';
-
-        const decoder = new TextDecoder('utf-8');
-        characteristic.addEventListener('characteristicvaluechanged', (event) => {
-          const str = decoder.decode(event.target.value).trim();
-          try {
-            const data = JSON.parse(str);
-            // Read Complementary Gyro tilt: {"p": -5.2, "r": 12.4, "b": 0}
-            if (data.p !== undefined && data.r !== undefined) {
-              targetPitch = THREE.MathUtils.clamp((data.p * Math.PI) / 180, -1.0, 1.0);
-              targetRoll  = THREE.MathUtils.clamp((-data.r * Math.PI) / 180, -1.3, 1.3);
-            }
-            if (data.b === 1) {
-              isFirstPerson = !isFirstPerson;
-              document.getElementById('hudCam').innerText = isFirstPerson ? 'FIRST PERSON' : 'CHASE (3RD)';
-              document.getElementById('crosshair').style.display = isFirstPerson ? 'block' : 'none';
-            }
-          } catch (err) {}
-        });
-
-        device.addEventListener('gattserverdisconnected', () => {
-          document.getElementById('connectBtn').style.display = 'block';
-          document.getElementById('flightDeck').style.display = 'none';
-        });
-
-      } catch (err) {
-        console.error("Bluetooth pairing error:", err);
-      }
-    });
-
-    // Keyboard Fallback (Arrow Keys / WASD / C key)
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a') targetRoll = 0.8;
-      if (e.key === 'ArrowRight' || e.key === 'd') targetRoll = -0.8;
-      if (e.key === 'ArrowUp' || e.key === 'w') targetPitch = -0.5;
-      if (e.key === 'ArrowDown' || e.key === 's') targetPitch = 0.5;
-      if (e.key === 'c') {
-        isFirstPerson = !isFirstPerson;
-        document.getElementById('hudCam').innerText = isFirstPerson ? 'FIRST PERSON' : 'CHASE (3RD)';
-        document.getElementById('crosshair').style.display = isFirstPerson ? 'block' : 'none';
-      }
-    });
-    window.addEventListener('keyup', (e) => {
-      if (['ArrowLeft','ArrowRight','a','d'].includes(e.key)) targetRoll = 0;
-      if (['ArrowUp','ArrowDown','w','s'].includes(e.key)) targetPitch = 0;
-    });
-
-    // --- 7. Main Aerodynamic Flight Loop ---
-    const euler = new THREE.Euler(0, 0, 0, 'YXZ');
-
-    function animate() {
-      requestAnimationFrame(animate);
-
-      updateExplosionParticles();
-
-      if (!isCrashed) {
-        currentRoll += (targetRoll - currentRoll) * 0.09;
-        currentPitch += (targetPitch - currentPitch) * 0.09;
-        currentYaw += -currentRoll * 0.026;
-
-        euler.set(currentPitch, currentYaw, currentRoll, 'YXZ');
-        plane.quaternion.setFromEuler(euler);
-
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(plane.quaternion);
-        plane.position.addScaledVector(forward, flightSpeed);
-
-        // Ground collision
-        if (plane.position.y <= 2.2) {
-          handleCrash();
-        }
-
-        // Building and skybridge collisions
-        const px = plane.position.x;
-        const py = plane.position.y;
-        const pz = plane.position.z;
-        for (let i = 0; i < colliders.length; i++) {
-          const c = colliders[i];
-          if (px > c.minX && px < c.maxX && pz > c.minZ && pz < c.maxZ && py >= c.minY && py <= c.maxY) {
-            handleCrash();
-            break;
-          }
-        }
-      }
-
-      // Infinite Looping Map (18,000 units)
-      if (Math.abs(plane.position.z) > MAP_LIMIT_Z - 200) {
-        plane.position.z *= -0.96;
-      }
-      if (Math.abs(plane.position.x) > 750) {
-        plane.position.x *= -0.96;
-      }
-
-      props.forEach(p => p.rotation.z += 0.9);
-
-      // Camera Position & Dynamic Shake
-      if (isFirstPerson) {
-        camera.position.copy(plane.position);
-        camera.quaternion.copy(plane.quaternion);
-        camera.translateZ(-3.8);
-        camera.translateY(0.7);
-      } else {
-        const chaseOffset = new THREE.Vector3(0, 9, 34).applyQuaternion(plane.quaternion);
-        camera.position.lerp(plane.position.clone().add(chaseOffset), 0.22);
-        camera.lookAt(plane.position.clone().add(new THREE.Vector3(0, 1.5, -14).applyQuaternion(plane.quaternion)));
-      }
-
-      if (cameraShake > 0) {
-        camera.position.x += (Math.random() - 0.5) * cameraShake;
-        camera.position.y += (Math.random() - 0.5) * cameraShake;
-        cameraShake *= 0.88;
-        if (cameraShake < 0.1) cameraShake = 0;
-      }
-
-      // HUD Telemetry
-      document.getElementById('hudSpd').innerText = Math.round(flightSpeed * 85);
-      document.getElementById('hudAlt').innerText = Math.max(0, Math.round(plane.position.y * 7));
-      let deg = Math.round((-currentYaw * 180 / Math.PI) % 360);
-      if (deg < 0) deg += 360;
-      document.getElementById('hudHdg').innerText = deg.toString().padStart(3, '0');
-
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-  </script>
-</body>
-</html>
