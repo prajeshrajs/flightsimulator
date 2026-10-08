@@ -23,23 +23,20 @@
       position: absolute;
       top: 16px; left: 16px;
       pointer-events: auto;
-      display: flex;
-      gap: 10px;
     }
     .btn {
-      padding: 10px 18px;
-      font-size: 13px;
+      padding: 12px 24px;
+      font-size: 14px;
       font-weight: 700;
       color: #fff;
+      background: #2563eb;
       border: 1px solid rgba(255,255,255,0.25);
       border-radius: 6px;
       cursor: pointer;
       box-shadow: 0 4px 14px rgba(0,0,0,0.4);
       transition: all 0.2s;
     }
-    .btn:hover { transform: translateY(-2px); }
-    #btnBle { background: #2563eb; }
-    #btnUsb { background: #059669; }
+    .btn:hover { background: #1d4ed8; transform: translateY(-2px); }
 
     #hudCanvas {
       position: absolute;
@@ -79,8 +76,7 @@
 <body>
   <div id="uiLayer">
     <div id="menuBar">
-      <button class="btn" id="btnBle">Connect BLE</button>
-      <button class="btn" id="btnUsb">Connect USB</button>
+      <button class="btn" id="btnConnect">Connect Bluetooth Flight Stick</button>
     </div>
     <canvas id="hudCanvas" width="500" height="500"></canvas>
     <div id="crashNotice">STRUCTURE COLLISION<br><span style="font-size: 16px; color: #fff;">RESPAWNING...</span></div>
@@ -94,9 +90,9 @@
   </div>
 
   <script>
-    // --- 1. Scene, Atmospheric Sunset Lighting & Fog ---
+    // --- 1. Scene & Lighting ---
     const scene = new THREE.Scene();
-    const skyColor = new THREE.Color(0xd47355); // Golden hour dusk
+    const skyColor = new THREE.Color(0xd47355);
     scene.background = skyColor;
     scene.fog = new THREE.FogExp2(0xd47355, 0.00032);
 
@@ -123,7 +119,7 @@
     sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
     scene.add(sun);
 
-    // --- 2. Ground Terrain & Water Harbor ---
+    // --- 2. Terrain & Water ---
     const MAP_LIMIT = 8000;
     const groundGeo = new THREE.PlaneGeometry(16000, 16000);
     const groundMat = new THREE.MeshStandardMaterial({ color: 0x1b281f, roughness: 0.9 });
@@ -140,7 +136,7 @@
     water.receiveShadow = true;
     scene.add(water);
 
-    // --- 3. Procedural Window Texture Generator ---
+    // --- 3. Window Textures ---
     function createWindowCanvas(baseColorHex, litColorHex) {
       const cv = document.createElement('canvas');
       cv.width = 128; cv.height = 256;
@@ -165,7 +161,7 @@
     winTex1.wrapS = winTex1.wrapT = THREE.RepeatWrapping;
     winTex2.wrapS = winTex2.wrapT = THREE.RepeatWrapping;
 
-    // --- 4. Towers, City Grid & Bridges ---
+    // --- 4. Towers, City & Bridges ---
     const colliders = [];
     const towerPalette = [
       new THREE.MeshStandardMaterial({ map: winTex1, roughness: 0.3, metalness: 0.4 }),
@@ -183,7 +179,6 @@
       bMesh.receiveShadow = true;
       group.add(bMesh);
 
-      // Rooftop Spire & Beacon Light
       if (height > 180) {
         const spireGeo = new THREE.CylinderGeometry(0.5, 3, 40, 8);
         const spire = new THREE.Mesh(spireGeo, new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9 }));
@@ -208,7 +203,6 @@
       });
     }
 
-    // Grid Layout with Main Flight Boulevard
     for (let z = -MAP_LIMIT + 400; z <= MAP_LIMIT - 400; z += 240) {
       [-420, -300, -180, 180, 300, 420].forEach(x => {
         if (Math.random() > 0.25) {
@@ -219,7 +213,6 @@
       });
     }
 
-    // Skybridges crossing the central boulevard
     for (let z = -MAP_LIMIT + 1000; z <= MAP_LIMIT - 1000; z += 1800) {
       const bridge = new THREE.Mesh(
         new THREE.BoxGeometry(360, 18, 28),
@@ -233,7 +226,7 @@
       });
     }
 
-    // --- 5. Road Networks & Streetlights ---
+    // --- 5. Roads & Vehicles ---
     const roadMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9 });
     const lineMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
 
@@ -251,7 +244,6 @@
       scene.add(dashes);
     }
 
-    // Central Boulevard & Cross Avenues
     createRoad(0, 0, 75, MAP_LIMIT * 2);
     createRoad(-240, 0, 35, MAP_LIMIT * 2);
     createRoad(240, 0, 35, MAP_LIMIT * 2);
@@ -259,14 +251,12 @@
       createRoad(0, z, 40, 1400, true);
     }
 
-    // Runway Strip
     const runway = new THREE.Mesh(new THREE.PlaneGeometry(85, 3800), new THREE.MeshStandardMaterial({ color: 0x111827 }));
     runway.rotation.x = -Math.PI / 2;
     runway.position.set(800, 0.3, 0);
     runway.receiveShadow = true;
     scene.add(runway);
 
-    // --- 6. Live Moving Traffic (Cars & Headlight Beams) ---
     const cars = [];
     const carGeos = [new THREE.BoxGeometry(3.5, 1.8, 6.5), new THREE.BoxGeometry(4, 2.6, 9.5)];
     const carColors = [0xef4444, 0x3b82f6, 0xffffff, 0xfacc15, 0x10b981];
@@ -278,7 +268,6 @@
         new THREE.MeshStandardMaterial({ color: carColors[Math.floor(Math.random() * carColors.length)] })
       );
 
-      // Glowing headlights & taillights
       const hl = new THREE.Mesh(new THREE.BoxGeometry(3, 0.6, 0.4), new THREE.MeshBasicMaterial({ color: 0xfffbeb }));
       hl.position.set(0, 0.2, -3.2);
       cMesh.add(hl);
@@ -298,7 +287,7 @@
       });
     }
 
-    // --- 7. Aircraft 3D Model ---
+    // --- 6. Aircraft 3D Model ---
     const plane = new THREE.Group();
     const matFuselage = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35 });
     const matAccent   = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.35 });
@@ -355,7 +344,7 @@
     plane.position.set(0, 95, 1200);
     scene.add(plane);
 
-    // --- 8. HUD & Flight Telemetry ---
+    // --- 7. HUD ---
     const hud = document.getElementById('hudCanvas').getContext('2d');
     function drawHUD(pitchDeg, rollDeg, speedKts, altFt) {
       hud.clearRect(0, 0, 500, 500);
@@ -391,7 +380,6 @@
       hud.stroke();
       hud.restore();
 
-      // Fixed Crosshair Reticle
       hud.strokeStyle = '#facc15';
       hud.lineWidth = 2.5;
       hud.beginPath();
@@ -406,7 +394,7 @@
       hud.fill();
     }
 
-    // --- 9. Flight Controls & Collision Systems ---
+    // --- 8. Controls & Wireless Connection ---
     let targetPitch = 0, targetRoll = 0;
     let curPitch = 0, curRoll = 0, curYaw = 0;
     let flightSpeed = 2.5;
@@ -430,37 +418,12 @@
       setTimeout(resetPlane, 1800);
     }
 
-    // BLE Connect
-    document.getElementById('btnBle').addEventListener('click', async () => {
-      try {
-        const dev = await navigator.bluetooth.requestDevice({
-          filters: [{ name: 'ESP32_Flight_Stick' }],
-          optionalServices: ["4fafc201-1fb5-459e-8fcc-c5c9c331914b"]
-        });
-        const server = await dev.gatt.connect();
-        const srv = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
-        const char = await srv.getCharacteristic("beb5483e-36e1-4688-b7f5-ea07361b26a8");
-        await char.startNotifications();
-        document.getElementById('txtLink').innerText = 'BLE ACTIVE';
-        document.getElementById('menuBar').style.display = 'none';
-
-        const dec = new TextDecoder('utf-8');
-        char.addEventListener('characteristicvaluechanged', (e) => {
-          try {
-            const d = JSON.parse(dec.decode(e.target.value));
-            if (d.p !== undefined) targetPitch = THREE.MathUtils.clamp((d.p * Math.PI) / 180, -0.9, 0.9);
-            if (d.r !== undefined) targetRoll  = THREE.MathUtils.clamp((-d.r * Math.PI) / 180, -1.2, 1.2);
-          } catch(err) {}
-        });
-      } catch (err) { alert("BLE Error: " + err.message); }
-    });
-
-    // USB Connect
-    document.getElementById('btnUsb').addEventListener('click', async () => {
+    // Connects to the Classic Bluetooth virtual serial port (no UUID required)
+    document.getElementById('btnConnect').addEventListener('click', async () => {
       try {
         const port = await navigator.serial.requestPort();
         await port.open({ baudRate: 115200 });
-        document.getElementById('txtLink').innerText = 'USB ACTIVE';
+        document.getElementById('txtLink').innerText = 'BLUETOOTH LINK ACTIVE';
         document.getElementById('menuBar').style.display = 'none';
 
         const decoder = new TextDecoderStream();
@@ -482,7 +445,9 @@
             } catch(e) {}
           }
         }
-      } catch (err) { alert("USB Error: " + err.message); }
+      } catch (err) {
+        alert("Connection Error: " + err.message);
+      }
     });
 
     // Keyboard Fallback
@@ -497,13 +462,12 @@
       if (['ArrowUp','ArrowDown','w','s'].includes(e.key)) targetPitch = 0;
     });
 
-    // --- 10. Main Animation Loop ---
+    // --- 9. Animation Loop ---
     const euler = new THREE.Euler(0, 0, 0, 'YXZ');
 
     function animate() {
       requestAnimationFrame(animate);
 
-      // Animate Traffic
       cars.forEach(car => {
         car.mesh.position.z += car.speed;
         if (car.mesh.position.z > car.bound) car.mesh.position.z = -car.bound;
@@ -521,10 +485,8 @@
         const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(plane.quaternion);
         plane.position.addScaledVector(fwd, flightSpeed);
 
-        // Ground check
         if (plane.position.y <= 1.8) triggerCrash();
 
-        // High-rise & Bridge Collisions
         const px = plane.position.x, py = plane.position.y, pz = plane.position.z;
         for (let i = 0; i < colliders.length; i++) {
           const c = colliders[i];
@@ -539,18 +501,15 @@
         }
       }
 
-      // Map boundary wrap
       if (Math.abs(plane.position.z) > MAP_LIMIT - 100) plane.position.z *= -0.96;
       if (Math.abs(plane.position.x) > 1200) plane.position.x *= -0.96;
 
       props.forEach(p => p.rotation.z += 0.85);
 
-      // Chase Camera
       const chaseOffset = new THREE.Vector3(0, 7.5, 28).applyQuaternion(plane.quaternion);
       camera.position.lerp(plane.position.clone().add(chaseOffset), 0.2);
       camera.lookAt(plane.position.clone().add(new THREE.Vector3(0, 1.2, -14).applyQuaternion(plane.quaternion)));
 
-      // Telemetry
       const ias = Math.round(flightSpeed * 85);
       const alt = Math.max(0, Math.round(plane.position.y * 7));
       const vs  = Math.round((plane.position.y - lastY) * 60 * 7);
